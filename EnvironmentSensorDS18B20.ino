@@ -32,12 +32,12 @@
 
 //for DS18B20
 #include <OneWire.h> 
-#include <DallasTemperature.h> 
+#include <Dalt_lastemperature.h> 
 #define ONE_WIRE_SENSOR_PIN A1
 #define DS18B20_resolution 12
 DeviceAddress DS18B20_adress;
 OneWire oneWireSensor(ONE_WIRE_SENSOR_PIN); 
-DallasTemperature myDS18B20(&oneWireSensor); 
+Dalt_lastemperature myDS18B20(&oneWireSensor); 
 #define MAX_SENSORS_DS18B20  5
 float temperature[MAX_SENSORS_DS18B20];
 
@@ -48,10 +48,10 @@ float temperature[MAX_SENSORS_DS18B20];
 // pins for LCD panel
 LiquidCrystal lcd(8, 9, 4, 5, 6, 7);
 
-long lastDisplay = 0;
-long lastSerial = 0;
-long lastSensorRead = 0;
-long lastBlink = 0;
+long t_lastDisplay = 0;
+long t_lastSerial = 0;
+long t_lastSensorRead = 0;
+long t_lastBlink = 0;
 
 bool blinkState = false;
 bool sensorError = 0;
@@ -90,8 +90,8 @@ int read_buttons()
 
 void displayHandler()
 {
-  if (lastDisplay < (millis() - LCD_INTERVAL)) {
-    lastDisplay = millis();
+  if (t_lastDisplay < (millis() - LCD_INTERVAL)) {
+    t_lastDisplay = millis();
     btnID = read_buttons();         // read the buttons
     switch (btnID) {               // depending on which button was pushed, we perform an action
         
@@ -156,8 +156,8 @@ void displayHandler()
 
 void serialWriteHandler()
 {
-  if (lastSerial < (millis() - SERIAL_INTERVAL)) {
-    lastSerial = millis();
+  if (t_lastSerial < (millis() - SERIAL_INTERVAL)) {
+    t_lastSerial = millis();
     Serial.print(String(millis()/1000)+"; ");
     for(byte i=0 ;i < MAX_SENSORS_DS18B20; i++) {	
       Serial.print(String(temperature[i]) + "; ");
@@ -216,8 +216,8 @@ void setup()
 void loop()
 {
   //blink LED and Display
-  if (lastBlink < (millis() - BLINK_INTERVAL)) {
-    lastBlink = millis();
+  if (t_lastBlink < (millis() - BLINK_INTERVAL)) {
+    t_lastBlink = millis();
     if (!blinkState) {
       digitalWrite(LED_BUILTIN, HIGH);
       blinkState = true;
@@ -229,9 +229,9 @@ void loop()
   }
 
   // read Sensor
-  if (lastSensorRead < (millis() - BME_INTERVAL)) {
+  if (t_lastSensorRead < (millis() - BME_INTERVAL)) {
     sensorError = 0;
-    lastSensorRead = millis();
+    t_lastSensorRead = millis();
     myDS18B20.requestTemperatures();
     for(byte i=0 ;i < MAX_SENSORS_DS18B20; i++) {
        if (i < myDS18B20.getDeviceCount()) {	
@@ -241,25 +241,7 @@ void loop()
 		      sensorError = 1;
         }
       }
-		}
-
-////////////////////////////
-/*
-    for(byte i=0 ;i < Anzahl_Sensoren_DS18B20; i++) {
-      if (i < myDS18B20.getDeviceCount()) {		
-		    Temperatur[i] = myDS18B20.getTempCByIndex(i);
-		    if (Temperatur[i] == DEVICE_DISCONNECTED_C) {
-	  	    Temperatur[i] = No_Val;
-		      Serial.println("Fehler");
-		    } else {
-          Serial.print(Temperatur[i]);
-          Serial.println(" 'C");
-        }
-      }
-    }
-*/
-///////////////////////////
-
+	}
   }
 
   // serialReadHandler();
