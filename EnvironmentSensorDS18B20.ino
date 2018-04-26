@@ -1,7 +1,11 @@
 /*  Author: Jan Schöfer
     Changelog:
 
-    Version 0.00a: 24.04.2018
+    Version 0.00a: 26.04.2018
+    -tested and working
+    -added support for multiple sensors
+
+    Version 0.00a: 26.04.2018
     -tested and working
     -derrived from EnvironmentSensorBME280 Version 0.20a: 12.02.2018
       
@@ -13,14 +17,14 @@
 */
 
 
-#define VERSION "0.00a"
+#define VERSION "0.01a"
 #define SENSOR_TYPE "DS18B20"
 
 #define SERIAL_INTERVAL 1000 //interval for sending serial [ms]
 #define LCD_INTERVAL 1000 //interval for refreshing LCD [ms] 
 #define BME_INTERVAL 2000 //interval for reading BME280 (may collide with sensor standby)
 #define BLINK_INTERVAL 1000 //interval for blinking (LED, LCD heart)
-#define NO_VALUE_FLOAT 0.01f //dummy value for error data
+#define NO_VALUE_FLOAT 0.00f //dummy value for error data
 #define SENSOR_ERROR_STRING "/SENSOR ERROR/" //string to print on error
 
 //I2C library
@@ -34,8 +38,8 @@
 DeviceAddress DS18B20_adress;
 OneWire oneWireSensor(ONE_WIRE_SENSOR_PIN); 
 DallasTemperature myDS18B20(&oneWireSensor); 
-#define Anzahl_Sensoren_DS18B20  1
-float temperature = NO_VALUE_FLOAT;
+#define MAX_SENSORS_DS18B20  5
+float temperature[MAX_SENSORS_DS18B20];
 
 //for LCD
 #include <Wire.h>
@@ -131,9 +135,14 @@ void displayHandler()
             }
 
             lcd.setCursor(1, 0);
-            lcd.print(" " + String(temperature));
-            lcd.write(byte(1)); //degree symbol
-            lcd.print("C ");
+            lcd.print(" " + String(temperature[0]));
+            lcd.print(" " + String(temperature[1]));
+            lcd.setCursor(0, 1);
+            lcd.print(String(temperature[2]));
+            lcd.print(" " + String(temperature[3]));
+            lcd.print(" " + String(temperature[4]));
+            // lcd.write(byte(1)); //degree symbol
+            // lcd.print("C ");
             if (sensorError) {
               lcd.print("ERROR"); //heart
             } else {
@@ -149,10 +158,13 @@ void serialWriteHandler()
 {
   if (lastSerial < (millis() - SERIAL_INTERVAL)) {
     lastSerial = millis();
-    Serial.print(String(millis()/1000) + "; " + String(temperature) + "; ");
-    if (sensorError) {
-      Serial.print(SENSOR_ERROR_STRING);
-    }
+    Serial.print(String(millis()/1000)+"; ");
+    for(byte i=0 ;i < MAX_SENSORS_DS18B20; i++) {	
+      Serial.print(String(temperature[i]) + "; ");
+      if (sensorError) {
+        Serial.print(SENSOR_ERROR_STRING);
+      }
+		} 
     Serial.println();
   }
 }
@@ -183,9 +195,11 @@ void setup()
 
   // initialize sensor communication
   myDS18B20.begin();
-  myDS18B20.getAddress(DS18B20_adress, 0);
-  myDS18B20.setResolution(DS18B20_adress, DS18B20_resolution);
-
+  for(byte i=0 ;i < myDS18B20.getDeviceCount(); i++) {
+    if(myDS18B20.getAddress(DS18B20_adress, i)) {
+      myDS18B20.setResolution(DS18B20_adress, DS18B20_resolution);
+    }
+  }
 
   lcd.begin(16, 2);              // initialise LCD
   lcd.setCursor(0, 0);           // set cursor to beginning
@@ -219,11 +233,33 @@ void loop()
     sensorError = 0;
     lastSensorRead = millis();
     myDS18B20.requestTemperatures();
-    temperature = myDS18B20.getTempCByIndex(0);
-    if (temperature == DEVICE_DISCONNECTED_C) {
-	  	  temperature = NO_VALUE_FLOAT;
-		    sensorError = 1;
+    for(byte i=0 ;i < MAX_SENSORS_DS18B20; i++) {
+       if (i < myDS18B20.getDeviceCount()) {	
+        temperature[i] = myDS18B20.getTempCByIndex(i);
+        if (temperature[i] == DEVICE_DISCONNECTED_C) {
+	  	    temperature[i] = NO_VALUE_FLOAT;
+		      sensorError = 1;
+        }
+      }
 		}
+
+////////////////////////////
+/*
+    for(byte i=0 ;i < Anzahl_Sensoren_DS18B20; i++) {
+      if (i < myDS18B20.getDeviceCount()) {		
+		    Temperatur[i] = myDS18B20.getTempCByIndex(i);
+		    if (Temperatur[i] == DEVICE_DISCONNECTED_C) {
+	  	    Temperatur[i] = No_Val;
+		      Serial.println("Fehler");
+		    } else {
+          Serial.print(Temperatur[i]);
+          Serial.println(" 'C");
+        }
+      }
+    }
+*/
+///////////////////////////
+
   }
 
   // serialReadHandler();
