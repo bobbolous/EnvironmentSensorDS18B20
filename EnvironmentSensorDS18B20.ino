@@ -2,12 +2,14 @@
     Changelog:
 
     Version 0.00a: 24.04.2018
-    derrived from EnvironmentSensorBME280 Version 0.20a: 12.02.2018
+    -tested and working
+    -derrived from EnvironmentSensorBME280 Version 0.20a: 12.02.2018
       
     Setup:
     Arduino UNO
     LCD Keypad Shield and 
     DS18B20 connected to A1(Yellow), 5V (red), GND (black)
+    4k7 pull-up resistor bewtween A1 and 5V
 */
 
 
@@ -18,18 +20,22 @@
 #define LCD_INTERVAL 1000 //interval for refreshing LCD [ms] 
 #define BME_INTERVAL 2000 //interval for reading BME280 (may collide with sensor standby)
 #define BLINK_INTERVAL 1000 //interval for blinking (LED, LCD heart)
+#define NO_VALUE_FLOAT 0.01f //dummy value for error data
+#define SENSOR_ERROR_STRING "/SENSOR ERROR/" //string to print on error
 
 //I2C library
 #include <Wire.h>
 
 //for DS18B20
-#define SENSOR_PIN A1
-/*TODO
-#include <OneWire.h>
-#include <DallasTemperature.h>
-OneWire oneWire(SENSOR_PIN);
-DallasTemperature myDS18B20(&oneWire);
-*/
+#include <OneWire.h> 
+#include <DallasTemperature.h> 
+#define ONE_WIRE_SENSOR_PIN A1
+#define DS18B20_resolution 12
+DeviceAddress DS18B20_adress;
+OneWire oneWireSensor(ONE_WIRE_SENSOR_PIN); 
+DallasTemperature myDS18B20(&oneWireSensor); 
+#define Anzahl_Sensoren_DS18B20  1
+float temperature = NO_VALUE_FLOAT;
 
 //for LCD
 #include <Wire.h>
@@ -43,9 +49,8 @@ long lastSerial = 0;
 long lastSensorRead = 0;
 long lastBlink = 0;
 
-float temperature = 0.0;
-
 bool blinkState = false;
+bool sensorError = 0;
 
 // stuff for LCD Keypad Shield
 int btnID     = 0;
@@ -58,9 +63,10 @@ int btnAnalogValue  = 0;
 #define btnNONE   5
 
 //additional LCD characters
-uint8_t heart[8] = {0x0, 0xa, 0x1f, 0x1f, 0xe, 0x4, 0x0}; //heart symbol
-uint8_t degree[8] = {0x2, 0x5, 0x2, 0x0, 0x0, 0x0, 0x0}; //degree symbol
-uint8_t arrowup[8] = {0x4, 0xe, 0x15, 0x4, 0x4, 0x4, 0x4}; //arrow-up symbol
+uint8_t heart[8] = {0x00, 0x0A, 0x1F, 0x1F, 0x0E, 0x04, 0x00}; //heart symbol
+uint8_t degree[8] = {0x02, 0x05, 0x02, 0x00, 0x00, 0x00, 0x00}; //degree symbol
+uint8_t arrowup[8] = {0x04, 0x0E, 0x15, 0x04, 0x04, 0x04, 0x04}; //arrow-up symbol
+//uint8_t skull[8] = {0x0E,0x1F,0x15,0x04,0x0E,0x0E,0x15,0x00}; //skull symbol
 
 // read buttons
 int read_buttons()
@@ -119,8 +125,7 @@ void displayHandler()
             lcd.clear();
             lcd.setCursor(0, 0);
             if (!blinkState) {
-              lcd.write(byte(0)); //heart
-              //lcd.print("X ");
+                lcd.write(byte(0)); //heart
             } else {
               lcd.print("  "); //delete heart
             }
@@ -128,7 +133,12 @@ void displayHandler()
             lcd.setCursor(1, 0);
             lcd.print(" " + String(temperature));
             lcd.write(byte(1)); //degree symbol
-            lcd.print("C");
+            lcd.print("C ");
+            if (sensorError) {
+              lcd.print("ERROR"); //heart
+            } else {
+              lcd.print(" ");
+            }
           }
           break;
     }
@@ -139,7 +149,11 @@ void serialWriteHandler()
 {
   if (lastSerial < (millis() - SERIAL_INTERVAL)) {
     lastSerial = millis();
-    Serial.println(String(millis()/1000) + "; " + String(temperature) + "; ");
+    Serial.print(String(millis()/1000) + "; " + String(temperature) + "; ");
+    if (sensorError) {
+      Serial.print(SENSOR_ERROR_STRING);
+    }
+    Serial.println();
   }
 }
 
@@ -152,7 +166,7 @@ void serialReadHandler()
 
 void setup()
 {
-  // initialize serial communication at 115200 bits per second:
+  // initialize serial communication at 115200 bits per second
   Serial.begin(115200);
 
   //load lcd
@@ -162,17 +176,25 @@ void setup()
   lcd.createChar(0, heart);
   lcd.createChar(1, degree);
   lcd.createChar(2, arrowup);
+  //lcd.createChar(3, skull);
   lcd.home();
 
   pinMode(LED_BUILTIN, OUTPUT);
 
+  // initialize sensor communication
+  myDS18B20.begin();
+  myDS18B20.getAddress(DS18B20_adress, 0);
+  myDS18B20.setResolution(DS18B20_adress, DS18B20_resolution);
+
+
   lcd.begin(16, 2);              // initialise LCD
   lcd.setCursor(0, 0);           // set cursor to beginning
-  lcd.print("Sensor: ");      // print sensor
+  lcd.print("Sensor: ");
   lcd.print(SENSOR_TYPE);
+  lcd.print(" " + String(myDS18B20.getDeviceCount()));      // print sensor info
   lcd.setCursor(0, 1);           // set cursor to second line
-  lcd.print("EnviroSens");         // print a simple message
-  lcd.print(VERSION);
+  lcd.print("EnviroSens");
+  lcd.print(VERSION);         // print Version
 
   delay(2000); // wait so someone can read the display
 }
@@ -194,8 +216,14 @@ void loop()
 
   // read Sensor
   if (lastSensorRead < (millis() - BME_INTERVAL)) {
+    sensorError = 0;
     lastSensorRead = millis();
-    temperature = analogRead(SENSOR_PIN);
+    myDS18B20.requestTemperatures();
+    temperature = myDS18B20.getTempCByIndex(0);
+    if (temperature == DEVICE_DISCONNECTED_C) {
+	  	  temperature = NO_VALUE_FLOAT;
+		    sensorError = 1;
+		}
   }
 
   // serialReadHandler();
