@@ -32,12 +32,12 @@
 
 //for DS18B20
 #include <OneWire.h> 
-#include <Dalt_lastemperature.h> 
+#include <DallasTemperature.h>
 #define ONE_WIRE_SENSOR_PIN A1
 #define DS18B20_resolution 12
 DeviceAddress DS18B20_adress;
 OneWire oneWireSensor(ONE_WIRE_SENSOR_PIN); 
-Dalt_lastemperature myDS18B20(&oneWireSensor); 
+DallasTemperature myDS18B20(&oneWireSensor); 
 #define MAX_SENSORS_DS18B20  5
 float temperature[MAX_SENSORS_DS18B20];
 
